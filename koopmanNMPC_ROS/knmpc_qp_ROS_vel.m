@@ -223,11 +223,11 @@ node_robot2=ros2node("/node_robot2", 30);
 % Definition of:
 %   - subscribers: for odometry (both robots);
 %   - publishers: for velocity commands (both robots);
-odom_sub_1 = ros2subscriber(node_robot1, "/tb3_4/odom","nav_msgs/Odometry"); 
-odom_sub_2 = ros2subscriber(node_robot2, "/turtlebot2/odom","nav_msgs/Odometry"); 
+odom_sub_1 = ros2subscriber(node_robot1, "/tb3_3/odom","nav_msgs/Odometry"); 
+odom_sub_2 = ros2subscriber(node_robot2, "/tb3_4/odom","nav_msgs/Odometry"); 
 
-%vel_pub_1 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
-vel_pub_2 = ros2publisher(node_robot1, "/turtlebot2/cmd_vel", "geometry_msgs/TwistStamped"); 
+vel_pub_1 = ros2publisher(node_robot1, "/tb3_3/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
+vel_pub_2 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped"); 
 
 
 %% Control loop
