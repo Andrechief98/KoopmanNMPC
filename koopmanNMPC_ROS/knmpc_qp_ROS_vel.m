@@ -78,8 +78,11 @@ P = 1*Q;
 S = diag(1e06*ones(nx,1));
 S_nl = 1e06;
 
-u_lb = [-0.2, -1.5]';
-u_ub = [0.2, 1.5]';
+max_lin_vel = 0.2;
+max_ang_vel = 1.5;
+
+u_lb = [-max_lin_vel, -max_ang_vel]';
+u_ub = [max_lin_vel, max_ang_vel]';
 
 % Bound su state variables
 x_lb = [-5, -5, -inf]';
@@ -242,12 +245,13 @@ vel_pub_2 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistSta
 counter = 0;
 u_o = zeros(nu,1);
 
+
 while ~ref1_reached
 
     % hold on
     % Receiving odometry (both robots)
     odom_msg_rob1 = receive(odom_sub_1);
-    % odom_msg_rob2 = receive(odom_sub_2);
+    odom_msg_rob2 = receive(odom_sub_2);
 
     % Extracting information for robot1 (K-NMPC)
     pose_rob1 = odom_msg_rob1.pose.pose;
@@ -262,23 +266,23 @@ while ~ref1_reached
 
     
     % Extracting information for robot2
-    % pose_rob2 = odom_msg_rob2.pose.pose;
-    % twist_rob2 = odom_msg_rob2.twist.twist;
-    % 
-    % position_rob2 = [pose_rob2.position.x; pose_rob2.position.y];
-    % eul_angles_rob2 = quat2eul([pose_rob2.orientation.w, pose_rob2.orientation.x, pose_rob2.orientation.y, pose_rob2.orientation.z]); %from quaternion to Euler angles (ZXY)
-    % orientation_rob2 = eul_angles_rob2(1);
-    % lin_vel_rob2 = twist_rob2.linear.x;
-    % ang_vel_rob2 = twist_rob2.angular.z;
+    pose_rob2 = odom_msg_rob2.pose.pose;
+    twist_rob2 = odom_msg_rob2.twist.twist;
 
-    position_rob2 = [60; 60];
-    orientation_rob2 = 0;
-    lin_vel_rob2 = 0;
-    ang_vel_rob2 = 0;
-    % fprintf("Ciao")
+    position_rob2 = [pose_rob2.position.x; pose_rob2.position.y];
+    eul_angles_rob2 = quat2eul([pose_rob2.orientation.w, pose_rob2.orientation.x, pose_rob2.orientation.y, pose_rob2.orientation.z]); %from quaternion to Euler angles (ZXY)
+    orientation_rob2 = eul_angles_rob2(1);
+    lin_vel_rob2 = twist_rob2.linear.x;
+    ang_vel_rob2 = twist_rob2.angular.z;
+
+    % position_rob2 = [60; 60];
+    % orientation_rob2 = 0;
+    % lin_vel_rob2 = 0;
+    % ang_vel_rob2 = 0;
+    
     % Computing the current robot distance from corresponding reference
     ref1_dist = sqrt(sum((ref1(1:2)-position_rob1).^2));
-    % ref2_dist = sqrt(sum((ref2(1:2)-position_rob2).^2));
+    ref2_dist = sqrt(sum((ref2(1:2)-position_rob2).^2));
     
     % NMPC control for robot1
     if ref1_dist<=ref1_tol && ~ref1_reached
@@ -327,7 +331,7 @@ while ~ref1_reached
         velMsg_rob1.twist.linear.x = ctrl_inp_lin_vel;
         velMsg_rob1.twist.angular.z = ctrl_inp_ang_vel;
         velMsg_rob1.header.stamp = ros2time(node_robot1,"now");
-        % velMsg_rob1.header.frame_id = 'odom';
+        velMsg_rob1.header.frame_id = 'tb3_3/odom';
         
         send(vel_pub_1, velMsg_rob1);
         pause(0.001)
@@ -335,18 +339,40 @@ while ~ref1_reached
     
     
     % Movement of robot2
-    % if ref2_dist<=ref2_tol && ~ref2_reached
-    %     % Reference of robot2 reached
-    %     velMsg_rob2.linear.x = 0;
-    %     velMsg_rob2.angular.z = 0;
-    %     send(vel_pub_2, velMsg_rob2)
-    %     fprintf("Robot 2 has reached its reference\n")
-    %     ref2_reached = true;
-    % else
-    %     % linear movement
-    %     velMsg_rob2.linear.x = 0;
-    %     velMsg_rob2.angular.z = 0;
-    % end
+    if ref2_dist<=ref2_tol && ~ref2_reached
+        % Reference of robot2 reached
+        velMsg_rob2.twist.linear.x = 0;
+        velMsg_rob2.twist.angular.z = 0;
+        send(vel_pub_2, velMsg_rob2)
+        fprintf("Robot 2 has reached its reference\n")
+        ref2_reached = true;
+    else
+        % proportional linear movement
+        if abs(ref2_dist)> max_lin_vel
+            velMsg_rob2.twist.linear.x = max_lin_vel; % Proportional control for linear velocity
+        else 
+            velMsg_rob2.twist.linear.x = ref2_dist;
+        end
+
+        % proportional angular movement
+        angle_diff = atan2(ref2(2) - position_rob2(2), ref2(1) - position_rob2(1)) - orientation_rob2; 
+        if abs(angle_diff)>max_ang_vel
+            velMsg_rob2.twist.angular.z = sign(angle_diff)*max_ang_vel;
+        else
+            velMsg_rob2.twist.angular.z = angle_diff;
+        end  
+
+        velMsg_rob2.twist.linear.y = 0.0; 
+        velMsg_rob2.twist.linear.z = 0.0; 
+        
+        velMsg_rob2.twist.angular.x = 0.0; 
+        velMsg_rob2.twist.angular.y = 0.0; 
+        velMsg_rob2.header.stamp = ros2time(node_robot1, "now");
+        velMsg_rob2.header.frame_id = 'tb3_4/odom';
+        send(vel_pub_2, velMsg_rob2);
+        pause(0.001)
+        
+    end
 
     % plot(position_rob1(1), position_rob1(2), '.', 'LineWidth', 2,'color', 'b')
     % plot(position_rob2(1), position_rob2(2), '.', 'LineWidth', 2, 'color', 'r')
