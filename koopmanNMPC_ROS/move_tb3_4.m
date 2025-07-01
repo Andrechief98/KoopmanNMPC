@@ -13,8 +13,8 @@ odomSub = ros2subscriber(node, "/tb3_4/odom", "nav_msgs/Odometry");
 cmdVelPub = ros2publisher(node, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
 
 
-ref_pos = [0, 0];        
-ref_angle = deg2rad(0);     
+ref_pos = [1, 1];        
+ref_angle = deg2rad(-135);     
 
 ref_reached = false;
 
@@ -24,6 +24,8 @@ max_lin_vel = 0.15;
 max_ang_vel = 1;
 
 %%
+
+velMsg = ros2message(cmdVelPub);
 
 while ~ref_reached
     
@@ -42,7 +44,7 @@ while ~ref_reached
     ref_dist = sqrt(sum((ref_pos(1:2)-position_rob).^2));
     
     % Creation of the velocity message
-    velMsg = ros2message(cmdVelPub);
+    
     
 
     if ref_dist<=ref_tol && ~ref_reached

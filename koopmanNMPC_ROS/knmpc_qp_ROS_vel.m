@@ -11,9 +11,9 @@ nx = 3;
 nu = 2;
 
 % Radius
-r_ego = 0.5;
+r_ego = 0.3;
 
-Ts = 0.05;
+Ts = 0.2;
 
 % % Initial condition
 % x0 = [0, 0, 0]';
@@ -89,7 +89,7 @@ x_lb = [-5, -5, -inf]';
 x_ub = [5, 5, inf]';
 
 n_obst = 1;
-r_obst = 0.5;
+r_obst = 0.3;
 
 %% MPC controller
 
@@ -212,6 +212,8 @@ ref1_tol = 2e-1;
 ref2 = [0;0];
 ref2_reached = false;
 ref2_tol = 2e-1;
+ref2_angle_tol = 1e-1;
+ref2_angle = deg2rad(-135); 
 
 
 %% ROS2 Network
@@ -230,25 +232,21 @@ odom_sub_1 = ros2subscriber(node_robot1, "/tb3_3/odom","nav_msgs/Odometry");
 odom_sub_2 = ros2subscriber(node_robot2, "/tb3_4/odom","nav_msgs/Odometry"); 
 
 vel_pub_1 = ros2publisher(node_robot1, "/tb3_3/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
-vel_pub_2 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped"); 
+vel_pub_2 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
 
 
 %% Control loop
-% f1 = figure(1);publisher
-% 
-% axis equal, grid on, box on
-% set(gca,'TickLabelInterpreter','latex','fontsize',12)
-% xlim([-5,7])
-% xlabel('$x$ [m]','interpreter','latex')
-% ylabel('$y$ [m]','interpreter','latex')
-% title('Planar motion','interpreter','latex')
+
 counter = 0;
 u_o = zeros(nu,1);
+velMsg_rob1 = ros2message(vel_pub_1);
+velMsg_rob1.header.frame_id = 'tb3_3/odom';
 
+velMsg_rob2 = ros2message(vel_pub_2);
+velMsg_rob2.header.frame_id = 'tb3_4/odom';
 
 while ~ref1_reached
 
-    % hold on
     % Receiving odometry (both robots)
     odom_msg_rob1 = receive(odom_sub_1);
     odom_msg_rob2 = receive(odom_sub_2);
@@ -262,8 +260,6 @@ while ~ref1_reached
     orientation_rob1 = eul_angles_rob1(1);
     lin_vel_rob1 = twist_rob1.linear.x;
     ang_vel_rob1 = twist_rob1.angular.z;
-
-
     
     % Extracting information for robot2
     pose_rob2 = odom_msg_rob2.pose.pose;
@@ -275,21 +271,19 @@ while ~ref1_reached
     lin_vel_rob2 = twist_rob2.linear.x;
     ang_vel_rob2 = twist_rob2.angular.z;
 
-    % position_rob2 = [60; 60];
-    % orientation_rob2 = 0;
-    % lin_vel_rob2 = 0;
-    % ang_vel_rob2 = 0;
     
     % Computing the current robot distance from corresponding reference
     ref1_dist = sqrt(sum((ref1(1:2)-position_rob1).^2));
     ref2_dist = sqrt(sum((ref2(1:2)-position_rob2).^2));
-    
+
+
     % NMPC control for robot1
     if ref1_dist<=ref1_tol && ~ref1_reached
         % Reference of robot1 reached
-        velMsg_rob1 = ros2message(vel_pub_1);
         velMsg_rob1.linear.x = 0;
         velMsg_rob1.angular.z = 0;
+        velMsg_rob1.header.stamp = ros2time(node_robot1,"now");
+        send(vel_pub_1, velMsg_rob1);
         send(vel_pub_1, velMsg_rob1)
         fprintf("Robot 1 has reached its reference\n")
         ref1_reached = true;
@@ -300,7 +294,7 @@ while ~ref1_reached
         v_lin = lin_vel_rob1;
         theta = orientation_rob1;
 
-        x_mpc = [x_rob1; y_rob1; theta]
+        x_mpc = [x_rob1; y_rob1; theta];
         z_mpc = phi(x_mpc);
 
 	    % Pred. model lin.
@@ -327,63 +321,86 @@ while ~ref1_reached
         ctrl_inp_ang_vel = u_mpc(2)
 
 	    % Velocity message
-        velMsg_rob1 = ros2message(vel_pub_1);
         velMsg_rob1.twist.linear.x = ctrl_inp_lin_vel;
         velMsg_rob1.twist.angular.z = ctrl_inp_ang_vel;
-        velMsg_rob1.header.stamp = ros2time(node_robot1,"now");
-        velMsg_rob1.header.frame_id = 'tb3_3/odom';
-        
+        velMsg_rob1.header.stamp = ros2time(node_robot1,"now");        
         send(vel_pub_1, velMsg_rob1);
-        pause(0.001)
-    end
-    
+        % pause(0.001)
+    end 
     
     % Movement of robot2
     if ref2_dist<=ref2_tol && ~ref2_reached
         % Reference of robot2 reached
+        fprintf("Robot 2: reference position reached\n")
+        
         velMsg_rob2.twist.linear.x = 0;
-        velMsg_rob2.twist.angular.z = 0;
+        
+        ref2_angle_dist = ref2_angle - orientation_rob2;
+
+        if abs(ref2_angle_dist) < ref2_angle_tol
+            velMsg_rob2.twist.angular.z = 0;
+            ref2_reached = true;
+            fprintf("Robot 2: orientation reached\n")
+        else
+            velMsg_rob2.twist.angular.z = ref2_angle_dist;
+        end
+        
+        velMsg_rob2.header.stamp = ros2time(node_robot2, "now");
         send(vel_pub_2, velMsg_rob2)
-        fprintf("Robot 2 has reached its reference\n")
-        ref2_reached = true;
+        % pause(0.001)
+
     else
         % proportional linear movement
-        if abs(ref2_dist)> max_lin_vel
-            velMsg_rob2.twist.linear.x = max_lin_vel; % Proportional control for linear velocity
-        else 
-            velMsg_rob2.twist.linear.x = ref2_dist;
-        end
+        angle_diff_2 = wrapToPi(atan2(ref2(2) - position_rob2(2), ref2(1) - position_rob2(1)) - orientation_rob2);
 
-        % proportional angular movement
-        angle_diff = atan2(ref2(2) - position_rob2(2), ref2(1) - position_rob2(1)) - orientation_rob2; 
-        if abs(angle_diff)>max_ang_vel
-            velMsg_rob2.twist.angular.z = sign(angle_diff)*max_ang_vel;
+        if abs(angle_diff_2) > ref2_angle_tol
+            if abs(angle_diff_2)>max_ang_vel
+                velMsg_rob2.twist.angular.z = sign(angle_diff_2)*max_ang_vel;
+            else
+                velMsg_rob2.twist.angular.z = angle_diff_2;
+            end
         else
-            velMsg_rob2.twist.angular.z = angle_diff;
-        end  
+            if abs(ref2_dist)> max_lin_vel
+                velMsg_rob2.twist.linear.x = max_lin_vel;
+            else 
+                velMsg_rob2.twist.linear.x = ref2_dist;
+            end
+        end
 
         velMsg_rob2.twist.linear.y = 0.0; 
         velMsg_rob2.twist.linear.z = 0.0; 
         
         velMsg_rob2.twist.angular.x = 0.0; 
         velMsg_rob2.twist.angular.y = 0.0; 
-        velMsg_rob2.header.stamp = ros2time(node_robot1, "now");
-        velMsg_rob2.header.frame_id = 'tb3_4/odom';
+        velMsg_rob2.header.stamp = ros2time(node_robot2, "now");
         send(vel_pub_2, velMsg_rob2);
-        pause(0.001)
+        % pause(0.001)
         
     end
 
-    % plot(position_rob1(1), position_rob1(2), '.', 'LineWidth', 2,'color', 'b')
-    % plot(position_rob2(1), position_rob2(2), '.', 'LineWidth', 2, 'color', 'r')
-    % 
-    % 
-    % hold off
-	% drawnow
-	% pause(0.1)
-	% if ~ref1_reached 
-	% 	cla
-    % end
-    
-
+       
 end
+
+%%
+velMsg_rob1.twist.linear.x = 0.0; 
+velMsg_rob1.twist.linear.y = 0.0; 
+velMsg_rob1.twist.linear.z = 0.0; 
+
+velMsg_rob1.twist.angular.x = 0.0; 
+velMsg_rob1.twist.angular.y = 0.0; 
+velMsg_rob1.twist.angular.z = 0.0; 
+velMsg_rob1.header.stamp = ros2time(node_robot1,"now");
+velMsg_rob1.header.frame_id = 'tb3_3/odom';
+send(vel_pub_1, velMsg_rob1);
+
+%%
+velMsg_rob2.twist.linear.x = 0.0; 
+velMsg_rob2.twist.linear.y = 0.0; 
+velMsg_rob2.twist.linear.z = 0.0; 
+
+velMsg_rob2.twist.angular.x = 0.0; 
+velMsg_rob2.twist.angular.y = 0.0; 
+velMsg_rob2.twist.angular.z = 0.0; 
+velMsg_rob2.header.stamp = ros2time(node_robot2,"now");
+velMsg_rob2.header.frame_id = 'tb3_4/odom';
+send(vel_pub_2, velMsg_rob2);
