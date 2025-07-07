@@ -13,8 +13,8 @@ odomSub = ros2subscriber(node, "/tb3_4/odom", "nav_msgs/Odometry");
 cmdVelPub = ros2publisher(node, "/tb3_4/cmd_vel", "geometry_msgs/TwistStamped", "Reliability", "besteffort"); 
 
 
-ref_pos = [1, 1];        
-ref_angle = deg2rad(-135);     
+ref_pos = [1.75, 0.75];        
+ref_angle = deg2rad(135);     
 
 ref_reached = false;
 
@@ -95,6 +95,17 @@ end
 %% Stop the robot
 % 
 
+velMsg.twist.linear.x = 0.00; 
+velMsg.twist.linear.y = 0.0; 
+velMsg.twist.linear.z = 0.0; 
+
+velMsg.twist.angular.x = 0.0; 
+velMsg.twist.angular.y = 0.0; 
+velMsg.twist.angular.z = 0.0; 
+velMsg.header.stamp = ros2time(node, "now");
+velMsg.header.frame_id = 'tb3_4/odom';
+send(cmdVelPub, velMsg);
+%%
 velMsg.twist.linear.x = 0.0; 
 velMsg.twist.linear.y = 0.0; 
 velMsg.twist.linear.z = 0.0; 

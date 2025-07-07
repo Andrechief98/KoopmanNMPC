@@ -1,0 +1,182 @@
+clc
+clear
+
+%% DATA EXTRACTION
+bagPath = "./tests/test_1"; 
+bag = ros2bag(bagPath);
+
+% We extract the relevant topics
+topics = ["/tb3_3/odom", "/tb3_4/odom", "/tb3_3/cmd_vel", "/tb3_4/cmd_vel"];
+bagSel = select(bag, "Topic", topics);
+
+% We extract the messages from each topic
+odom_tb3_3 = readMessages(select(bagSel, "Topic", "/tb3_3/odom"));
+odom_tb3_4 = readMessages(select(bagSel, "Topic", "/tb3_4/odom"));
+cmd_tb3_3 = readMessages(select(bagSel, "Topic", "/tb3_3/cmd_vel"));
+cmd_tb3_4 = readMessages(select(bagSel, "Topic", "/tb3_4/cmd_vel"));
+
+% Function to extract robot's position and velocity from odometry
+extractOdom = @(msgs) struct( ...
+    'x', cellfun(@(m) m.pose.pose.position.x, msgs), ...
+    'y', cellfun(@(m) m.pose.pose.position.y, msgs), ...
+    'vx', cellfun(@(m) m.twist.twist.linear.x, msgs), ...
+    'omega_z', cellfun(@(m) m.twist.twist.angular.z, msgs), ...
+    'theta', cellfun(@(m) ...
+        quat2yaw([ ...
+            m.pose.pose.orientation.w, ...
+            m.pose.pose.orientation.x, ...
+            m.pose.pose.orientation.y, ...
+            m.pose.pose.orientation.z]), msgs) ...
+);
+% Function to extract robot's velocity from velocity topic
+extractVel = @(msgs) struct( ...
+    'vx', cellfun(@(m) m.twist.linear.x, msgs), ...
+    'omega_z', cellfun(@(m) m.twist.angular.z, msgs) ...
+);
+
+% Odometry data xtraction
+odomData.tb3_3 = extractOdom(odom_tb3_3);
+odomData.tb3_4 = extractOdom(odom_tb3_4);
+
+% Velocity data xtraction
+cmdData.tb3_3 = extractVel(cmd_tb3_3);
+cmdData.tb3_4 = extractVel(cmd_tb3_4);
+
+
+%% PLOTS
+% TRAJECTORIES PLOTS
+clc
+close all
+
+% Radius of the two robots
+r_rob1 = 0.25;
+r_rob2 = 0.3;
+% Bound su state variables
+x_lb = [-0.25, -0.25, -inf]';
+x_ub = [2.25, 2.25, inf]';
+
+f1 = figure(1); set(f1,'WindowStyle','normal','color','w'); f1.Position = [200   200   400   400];
+
+axis equal, grid on, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([x_lb(1), x_ub(1)]), ylim([x_lb(2), x_ub(2)])
+xlabel('$x$ [m]','interpreter','latex')
+ylabel('$y$ [m]','interpreter','latex')
+title('Planar motion','interpreter','latex')
+hold on
+
+% Bounds
+% plot([x_lb(1), x_ub(1), x_ub(1), x_lb(1), x_lb(1)], [x_lb(2), x_lb(2), x_ub(2), x_ub(2), x_lb(2)], '-', 'linewidth', 1.25, 'color', [0.35, 0.35, 0.35])
+
+% Reference
+plot(1, 1, '.', 'markersize', 20, 'color', [0 0.75 0])
+
+% Robot 1 (tb3_3)
+plot(odomData.tb3_3.x(:), odomData.tb3_3.y(:), '-', 'linewidth', 1.5, 'color', [0.5 0.5 1])
+plot(odomData.tb3_3.x(:), odomData.tb3_3.y(:), 'b.', 'markersize', 15)
+% plot_obst([odomData.tb3_3.x(:), odomData.tb3_3.y(:)], [2*r_rob1; 2*r_rob1], 1.5, [0.5 0.5 1])
+
+
+% Robot 2 (tb3_4)
+plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:),  '-', 'linewidth', 1.25, 'color', [0.35 0.35 0.35])
+plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:), '.', 'markersize', 15, 'color', [0.35 0.35 0.35])
+% plot_obst([odomData.tb3_4.x(:), odomData.tb3_4.y(:)], [2*r_rob2; 2*r_rob2], 1.5, [0.35 0.35 0.35])
+
+
+hold off
+
+
+
+% ODOMETRY AND CONTROL INPUT PLOTS
+f2 = figure(2); set(f2,'WindowStyle','normal','color','w'); f2.Position = [600   200   700   400];
+
+tiledlayout(2,3,'tilespacing','tight','padding','tight')
+
+nexttile(1), hold on
+
+plot(t, odomData.tb3_3.x, 'b-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('$x$ [m]','interpreter','latex')
+
+nexttile(2), hold on
+
+plot(t, odomData.tb3_3.y, 'b-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('$y$ [m]','interpreter','latex')
+
+nexttile(3), hold on
+
+plot(t, rad2deg(odomData.tb3_3.theta), 'b-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('Heading $\theta$ [deg]','interpreter','latex')
+
+nexttile(4), hold on
+
+plot(t, odomData.tb3_3.vx, 'b-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('Velocity $v$ [m/s]','interpreter','latex')
+
+nexttile(5), hold on
+
+plot(t(1:end-1), diff(cmdData.tb3_3.vx)./diff(t), 'r.-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('Acceleration $a$ [$\mathrm{m \, s^{-2}}$]','interpreter','latex')
+
+nexttile(6), hold on
+
+plot(t, rad2deg(cmdData.tb3_3.omega_z), 'r.-')
+
+hold off
+grid on, grid minor, box on
+set(gca,'TickLabelInterpreter','latex','fontsize',12)
+xlim([0, t(end)])
+xlabel('$t$ [s]','interpreter','latex')
+title('Angular velocity $\omega$ [deg/s]','interpreter','latex')
+
+% ====================
+
+
+function plot_obst(c, obst_size, line_width, color)
+fplot(@(t) c(1) + obst_size(1)/2*sin(t), @(t) c(2) + obst_size(2)/2*cos(t), '-', 'linewidth', line_width, 'color', color);
+end
+
+function yaw = quat2yaw(q)
+% q = [w, x, y, z] (Matlab quaterion format)
+w = q(1); x = q(2); y = q(3); z = q(4);
+
+% Conversion from quaternion to euler angles (ZXY)
+eul_angles = quat2eul([w, x, y, z]);
+yaw = eul_angles(1);
+end
+
+
+
+
+
+
+

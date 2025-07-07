@@ -11,7 +11,7 @@ nx = 3;
 nu = 2;
 
 % Radius
-r_ego = 0.3;
+r_ego = 0.25;
 
 Ts = 0.2;
 
@@ -19,7 +19,7 @@ Ts = 0.2;
 % x0 = [0, 0, 0]';
 
 % Reference
-x_r = [1, 1, 0]';
+x_r = [2, 2, 0]';
 
 n_ref = size(x_r,2);
 
@@ -64,16 +64,16 @@ B{2} = [Bp{2}; Bs{2}];
 
 %% MPC data
 
-Np = 15;
+Np = 10;
 Nc = 5;
 
 Tp = Ts;
 
 
-Q = diag([30, 30, 1e-03]);
-R = diag([1e-03, 1e-03]);
-Qd = diag([1e-01, 1e-01, 10]);
-Rd = diag([1, 10]);
+Q = diag([50, 50, 1e-03]);
+R = diag([1e-03, 1]);
+Qd = diag([1e-01, 1e-01, 1e-01]);
+Rd = diag([0.1, 10]);
 P = 1*Q;
 S = diag(1e06*ones(nx,1));
 S_nl = 1e06;
@@ -85,17 +85,31 @@ u_lb = [-max_lin_vel, -max_ang_vel]';
 u_ub = [max_lin_vel, max_ang_vel]';
 
 % Bound su state variables
-x_lb = [-5, -5, -inf]';
-x_ub = [5, 5, inf]';
+x_lb = [-0.25, -0.25, -inf]';
+x_ub = [2.25, 2.25, inf]';
 
-n_obst = 1;
+% Obstacles [box, robot_2, bin] 
+obst.x_c = [0.75, 1.75, 1.5];
+obst.y_c = [0.4, 0.75, 1.75];
+
+obst.lx = [0.4/sqrt(2), 0.3, 0.15];
+obst.ly = [0.6/sqrt(2), 0.3, 0.15];
+
+% obst.v_x = [0, -0.1, 0];
+% obst.v_y = [0, 0.1, 0];
+
+obst.alpha = [1.1, 1.1, 1.1];
+
+obst.type = {"r", "c", "c"};
+
+n_obst = length(obst.x_c);
 r_obst = 0.3;
 
 %% MPC controller
 
 % Yalmip variables
 
-% Obstacles position and velocity
+% Obstacles position and velocity[
 c_obst = sdpvar(2,n_obst,'full');
 v_obst = sdpvar(2,n_obst,'full');
 
@@ -108,6 +122,8 @@ u = sdpvar(nu*ones(1,Nc),1*ones(1,Nc));
 if Nc == 1
 	u = {u};
 end
+
+u_p = sdpvar(nu,1);
 
 % Reference
 x_ref = sdpvar(nx,1);
@@ -151,6 +167,7 @@ for i = 2:1:Np
 	cost = cost + quad_form(z{i}(1:nx)-z{i-1}(1:nx), Qd);
 	cost = cost + quad_form(u{ind_u(i)}-u{ind_u(i-1)}, Rd);
 end
+cost = cost + quad_form(u{ind_u(1)}-u_p, Rd);
 
 cost = cost + quad_form(z{i}(1:nx)-x_ref, P);
 
@@ -174,9 +191,16 @@ end
 for i = 1:1:Np
 	constr = [constr; x_lb + [r_ego; r_ego; 0] - e <= z{i}(1:nx) <= x_ub - [r_ego; r_ego; 0] + e];
 	for j=1:1:n_obst
-		constr = [constr; z{i}(4) - 2*(c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)*z{i}(1) + (c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)^2 + ...
-			z{i}(5) - 2*(c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)*z{i}(2) + (c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)^2 >= ...
-			(r_obst+r_ego)^2 - e_nl];
+		% constr = [constr; z{i}(4) - 2*(c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)*z{i}(1) + (c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)^2 + ...
+		% 	z{i}(5) - 2*(c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)*z{i}(2) + (c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)^2 >= ...
+		% 	(obst.r(j)+r_ego)^2 - e_nl];
+
+		a_o = (obst.lx(j) + obst.alpha(j)*r_ego)^2;
+		b_o = (obst.ly(j) + obst.alpha(j)*r_ego)^2;
+
+		constr = [constr; b_o*( z{i}(4) - 2*(c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)*z{i}(1) + (c_obst(1,j) + v_obst(1,j)*(i-1)*Ts)^2 ) + ...
+			a_o*( z{i}(5) - 2*(c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)*z{i}(2) + (c_obst(2,j) + v_obst(2,j)*(i-1)*Ts)^2 ) >= ...
+			a_o*b_o - e_nl];
 	end
 end
 
@@ -190,7 +214,7 @@ constr = [constr; e >= 0; e_nl >= 0];
 
 % Optimizer object (MPC controller)
 
-params_in = {z_in, x_ref, Ad, Bd, bd, c_obst, v_obst};
+params_in = {z_in, x_ref, Ad, Bd, bd, c_obst, v_obst, u_p};
 
 sol_out = {[u{:}], [z{:}]};
 
@@ -206,14 +230,15 @@ knmpc = optimizer(constr,cost,options,params_in,sol_out);
 % Reference robot1
 ref1 = x_r;
 ref1_reached = false;
-ref1_tol = 2e-1;
+ref1_tol = 1e-2;
 
 % Reference robot2
-ref2 = [0;0];
+ref2 = [0.25; 2.25];
 ref2_reached = false;
 ref2_tol = 2e-1;
 ref2_angle_tol = 1e-1;
 ref2_angle = deg2rad(-135); 
+max_lin_vel_rob2 = 0.1414;
 
 
 %% ROS2 Network
@@ -239,6 +264,7 @@ vel_pub_2 = ros2publisher(node_robot1, "/tb3_4/cmd_vel", "geometry_msgs/TwistSta
 
 counter = 0;
 u_o = zeros(nu,1);
+u_p = zeros(nu,1);
 velMsg_rob1 = ros2message(vel_pub_1);
 velMsg_rob1.header.frame_id = 'tb3_3/odom';
 
@@ -307,12 +333,19 @@ while ~ref1_reached
 	    bd = (Tp*eye(nz) + Tp^2/2*(A + A_lin) + Tp^3/6*(A + A_lin)^2 + Tp^4/24*(A + A_lin)^3)*b_lin;
         
         % Absolute linear velocity of robot2 [Vx,Vy]
-        absolute_lin_vel_rob2 = [lin_vel_rob2*cos(orientation_rob2); lin_vel_rob2*sin(orientation_rob2)];
+        absolute_lin_vel_obstacles = [
+            0, lin_vel_rob2*cos(orientation_rob2), 0; 
+            0, lin_vel_rob2*sin(orientation_rob2), 0
+            ];
+        position_obstacles = [
+            [obst.x_c(1); obst.y_c(1)], position_rob2, [obst.x_c(3); obst.y_c(3)]
+            ];
 	   
         % Compute optimal input    
-	    sol = knmpc({z_mpc, ref1, Ad, Bd, bd, position_rob2, absolute_lin_vel_rob2});
+	    sol = knmpc({z_mpc, ref1, Ad, Bd, bd, position_obstacles, absolute_lin_vel_obstacles, u_p});
 	    u_mpc = sol{1}(:,1);
-        u_o = 0.25*u_mpc;
+        u_p = u_mpc;
+        u_o = 0.5*u_mpc;
         
         % Extraction of linear velocity to apply
 	    ctrl_inp_lin_vel = u_mpc(1)
@@ -360,8 +393,8 @@ while ~ref1_reached
                 velMsg_rob2.twist.angular.z = angle_diff_2;
             end
         else
-            if abs(ref2_dist)> max_lin_vel
-                velMsg_rob2.twist.linear.x = max_lin_vel;
+            if abs(ref2_dist)> max_lin_vel_rob2
+                velMsg_rob2.twist.linear.x = max_lin_vel_rob2;
             else 
                 velMsg_rob2.twist.linear.x = ref2_dist;
             end
