@@ -21,6 +21,8 @@ extractOdom = @(msgs) struct( ...
     'y', cellfun(@(m) m.pose.pose.position.y, msgs), ...
     'vx', cellfun(@(m) m.twist.twist.linear.x, msgs), ...
     'omega_z', cellfun(@(m) m.twist.twist.angular.z, msgs), ...
+    'sec', cellfun(@(m) m.header.stamp.sec, msgs), ...
+    'nanosec', cellfun(@(m) m.header.stamp.nanosec, msgs), ...
     'theta', cellfun(@(m) ...
         quat2yaw([ ...
             m.pose.pose.orientation.w, ...
@@ -31,17 +33,55 @@ extractOdom = @(msgs) struct( ...
 % Function to extract robot's velocity from velocity topic
 extractVel = @(msgs) struct( ...
     'vx', cellfun(@(m) m.twist.linear.x, msgs), ...
-    'omega_z', cellfun(@(m) m.twist.angular.z, msgs) ...
+    'omega_z', cellfun(@(m) m.twist.angular.z, msgs), ...
+    'sec', cellfun(@(m) m.header.stamp.sec, msgs), ...
+    'nanosec', cellfun(@(m) m.header.stamp.nanosec, msgs) ...
 );
 
-% Odometry data xtraction
-odomData.tb3_3 = extractOdom(odom_tb3_3);
-odomData.tb3_4 = extractOdom(odom_tb3_4);
-
-% Velocity data xtraction
+% Velocity data extraction
 cmdData.tb3_3 = extractVel(cmd_tb3_3);
 cmdData.tb3_4 = extractVel(cmd_tb3_4);
 
+cmdData.tb3_3.time = double(cmdData.tb3_3.sec) + double(cmdData.tb3_3.nanosec)*10^-9;
+cmdData.tb3_4.time = double(cmdData.tb3_4.sec) + double(cmdData.tb3_4.nanosec)*10^-9;
+
+cmdData.tb3_3.time = cmdData.tb3_3.time(:) - cmdData.tb3_3.time(1);
+cmdData.tb3_4.time = cmdData.tb3_4.time(:) - cmdData.tb3_4.time(1);
+
+% Odometry data extraction
+odomData.tb3_3 = extractOdom(odom_tb3_3);
+odomData.tb3_4 = extractOdom(odom_tb3_4);
+
+odomData.tb3_3.time = double(odomData.tb3_3.sec) + double(odomData.tb3_3.nanosec)*10^-9;
+odomData.tb3_4.time = double(odomData.tb3_4.sec) + double(odomData.tb3_4.nanosec)*10^-9;
+
+
+% Rearrange the x-axis of the odometry data from robot_1 (K-NMPC
+% controlled)
+odomData.tb3_3.time = odomData.tb3_3.time(:) - odomData.tb3_3.time(1);
+
+start_idx_tb3_3_time = find(odomData.tb3_3.x < 0.01);
+odomData.tb3_3.time(start_idx_tb3_3_time) = [];
+odomData.tb3_3.x(start_idx_tb3_3_time) = [];
+odomData.tb3_3.y(start_idx_tb3_3_time) = [];
+odomData.tb3_3.theta(start_idx_tb3_3_time) = [];
+odomData.tb3_3.time = odomData.tb3_3.time - odomData.tb3_3.time(1);
+
+end_idx_tb3_3_time = find(odomData.tb3_3.x >=2);
+odomData.tb3_3.time(end_idx_tb3_3_time) = [];
+odomData.tb3_3.x(end_idx_tb3_3_time) = [];
+odomData.tb3_3.y(end_idx_tb3_3_time) = [];
+odomData.tb3_3.theta(end_idx_tb3_3_time) = [];
+
+% Refining the final data:
+odomData.tb3_3.time = [odomData.tb3_3.time; 20];
+odomData.tb3_3.x = [odomData.tb3_3.x; odomData.tb3_3.x(end)];
+odomData.tb3_3.y = [odomData.tb3_3.y; odomData.tb3_3.y(end)];
+odomData.tb3_3.theta = [odomData.tb3_3.theta ; odomData.tb3_3.theta(end)];
+
+cmdData.tb3_3.time = [cmdData.tb3_3.time; 20];
+cmdData.tb3_3.vx = [cmdData.tb3_3.vx ; cmdData.tb3_3.vx(end)];
+cmdData.tb3_3.omega_z = [cmdData.tb3_3.omega_z ; cmdData.tb3_3.omega_z(end)];
 
 %% PLOTS
 % TRAJECTORIES PLOTS
@@ -51,6 +91,14 @@ close all
 % Radius of the two robots
 r_rob1 = 0.25;
 r_rob2 = 0.3;
+
+% Obstacles [box, bin] 
+obst.x_c = [0.75, 1.5];
+obst.y_c = [0.4, 1.75];
+obst.lx = [0.4/sqrt(2), 0.15];
+obst.ly = [0.6/sqrt(2), 0.15];
+
+
 % Bound su state variables
 x_lb = [-0.25, -0.25, -inf]';
 x_ub = [2.25, 2.25, inf]';
@@ -66,20 +114,32 @@ title('Planar motion','interpreter','latex')
 hold on
 
 % Bounds
-% plot([x_lb(1), x_ub(1), x_ub(1), x_lb(1), x_lb(1)], [x_lb(2), x_lb(2), x_ub(2), x_ub(2), x_lb(2)], '-', 'linewidth', 1.25, 'color', [0.35, 0.35, 0.35])
+plot([x_lb(1), x_ub(1), x_ub(1), x_lb(1), x_lb(1)], [x_lb(2), x_lb(2), x_ub(2), x_ub(2), x_lb(2)], '-', 'linewidth', 1.25, 'color', [0.35, 0.35, 0.35])
 
+% Box
+plot_rect([obst.x_c(1); obst.y_c(1)], [obst.lx(1)*sqrt(2); obst.ly(1)*sqrt(2)], '-', 1.25, [0.35, 0.35, 0.35])
+plot_obst([obst.x_c(1); obst.y_c(1)], [obst.lx(1); obst.ly(1)], '--', 1.25, [0.35 0.35 0.35])
 
+% Bin
+plot_obst([obst.x_c(2); obst.y_c(2)], [obst.lx(2); obst.ly(2)], '--', 1.25, [0.35 0.35 0.35])
+
+step = 5;
+% Robot 2 (tb3_4)
+plot(odomData.tb3_4.x(1:step:end), odomData.tb3_4.y(1:step:end),  '-', 'linewidth', 1.25, 'color', [0.35 0.35 0.35])
+plot(odomData.tb3_4.x(1:step:end), odomData.tb3_4.y(1:step:end), '.', 'markersize', 15, 'color', [0.35 0.35 0.35])
+
+for i=1:step:length(odomData.tb3_4.x)
+    plot_obst([odomData.tb3_4.x(i), odomData.tb3_4.y(i)], [r_rob2; r_rob2], '-', 1.5, [0.75 0.75 0.75])
+end
 
 % Robot 1 (tb3_3)
-plot(odomData.tb3_3.x(:), odomData.tb3_3.y(:), '-', 'linewidth', 1.5, 'color', [0.5 0.5 1])
-plot(odomData.tb3_3.x(:), odomData.tb3_3.y(:), 'b.', 'markersize', 15)
-% plot_obst([odomData.tb3_3.x(:), odomData.tb3_3.y(:)], [2*r_rob1; 2*r_rob1], 1.5, [0.5 0.5 1])
+plot(odomData.tb3_3.x(1:step:end), odomData.tb3_3.y(1:step:end), '-', 'linewidth', 1.5, 'color', [0.5 0.5 1])
+plot(odomData.tb3_3.x(1:step:end), odomData.tb3_3.y(1:step:end), 'b.', 'markersize', 15)
 
+for i=1:step:length(odomData.tb3_3.x)
+    plot_obst([odomData.tb3_3.x(i), odomData.tb3_3.y(i)], [r_rob1; r_rob1], '-', 1.5, [0.5 0.5 1])
+end
 
-% Robot 2 (tb3_4)
-plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:),  '-', 'linewidth', 1.25, 'color', [0.35 0.35 0.35])
-plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:), '.', 'markersize', 15, 'color', [0.35 0.35 0.35])
-% plot_obst([odomData.tb3_4.x(:), odomData.tb3_4.y(:)], [2*r_rob2; 2*r_rob2], 1.5, [0.35 0.35 0.35])
 
 
 % Reference
@@ -88,7 +148,6 @@ plot(ref(1), ref(2) , '.', 'markersize', 20, 'color', [0 0.75 0])
 
 hold off
 
-t = linspace(0,25,length(odomData.tb3_3.y));
 
 
 % ODOMETRY AND CONTROL INPUT PLOTS
@@ -98,66 +157,65 @@ tiledlayout(2,3,'tilespacing','tight','padding','tight')
 
 nexttile(1), hold on
 
-plot(t, odomData.tb3_3.x, 'b-')
+
+plot(odomData.tb3_3.time, odomData.tb3_3.x, 'b-')
 
 hold off
 grid on, grid minor, box on
 set(gca,'TickLabelInterpreter','latex','fontsize',12)
-xlim([0, t(end)])
+xlim([0, odomData.tb3_3.time(end)])
 xlabel('$t$ [s]','interpreter','latex')
 title('$x$ [m]','interpreter','latex')
 
 nexttile(2), hold on
 
-plot(t, odomData.tb3_3.y, 'b-')
+plot(odomData.tb3_3.time, odomData.tb3_3.y, 'b-')
 
 hold off
 grid on, grid minor, box on
 set(gca,'TickLabelInterpreter','latex','fontsize',12)
-xlim([0, t(end)])
+xlim([0, odomData.tb3_3.time(end)])
 xlabel('$t$ [s]','interpreter','latex')
 title('$y$ [m]','interpreter','latex')
 
 nexttile(3), hold on
 
-plot(t, rad2deg(odomData.tb3_3.theta), 'b-')
+plot(odomData.tb3_3.time, rad2deg(odomData.tb3_3.theta), 'b-')
 
 hold off
 grid on, grid minor, box on
 set(gca,'TickLabelInterpreter','latex','fontsize',12)
-xlim([0, t(end)])
+xlim([0, odomData.tb3_3.time(end)])
 xlabel('$t$ [s]','interpreter','latex')
 title('Heading $\theta$ [deg]','interpreter','latex')
 
 nexttile(4), hold on
 
-t_cmd = linspace(0,25,length(cmdData.tb3_3.omega_z));
-
-plot(t_cmd, cmdData.tb3_3.vx, 'b-')
+plot(cmdData.tb3_3.time, cmdData.tb3_3.vx, 'b-')
 
 hold off
 grid on, grid minor, box on
 set(gca,'TickLabelInterpreter','latex','fontsize',12)
-xlim([0, t_cmd(end)])
+xlim([0, cmdData.tb3_3.time(end)])
 xlabel('$t$ [s]','interpreter','latex')
 title('Velocity $v$ [m/s]','interpreter','latex')
 
 nexttile(5), hold on
 
-plot(t_cmd, rad2deg(cmdData.tb3_3.omega_z), 'r.-')
+plot(cmdData.tb3_3.time, rad2deg(cmdData.tb3_3.omega_z), 'r.-')
 
 hold off
 grid on, grid minor, box on
 set(gca,'TickLabelInterpreter','latex','fontsize',12)
-xlim([0, t_cmd(end)])
+xlim([0, cmdData.tb3_3.time(end)])
 xlabel('$t$ [s]','interpreter','latex')
 title('Angular velocity $\omega$ [deg/s]','interpreter','latex')
 
-% ====================
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-function plot_obst(c, obst_size, line_width, color)
-fplot(@(t) c(1) + obst_size(1)/2*sin(t), @(t) c(2) + obst_size(2)/2*cos(t), '-', 'linewidth', line_width, 'color', color);
+function plot_obst(c, size, line_style, line_width, color)
+fplot(@(t) c(1) + size(1)*sin(t), @(t) c(2) + size(2)*cos(t), line_style, 'linewidth', line_width, 'color', color);
 end
 
 function yaw = quat2yaw(q)
@@ -169,6 +227,10 @@ eul_angles = quat2eul([w, x, y, z]);
 yaw = eul_angles(1);
 end
 
+function plot_rect(c, size, line_style, line_width, color)
+plot([c(1)-size(1)/2; c(1)+size(1)/2; c(1)+size(1)/2; c(1)-size(1)/2; c(1)-size(1)/2], ...
+	[c(2)-size(2)/2; c(2)-size(2)/2; c(2)+size(2)/2; c(2)+size(2)/2; c(2)-size(2)/2], line_style, 'color', color, 'linewidth', line_width)
+end
 
 
 
