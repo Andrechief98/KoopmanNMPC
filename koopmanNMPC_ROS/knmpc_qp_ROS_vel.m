@@ -230,7 +230,7 @@ knmpc = optimizer(constr,cost,options,params_in,sol_out);
 % Reference robot1
 ref1 = x_r;
 ref1_reached = false;
-ref1_tol = 1e-2;
+ref1_tol = 2e-2;
 
 % Reference robot2
 ref2 = [0.25; 2.25];
@@ -238,7 +238,7 @@ ref2_reached = false;
 ref2_tol = 2e-1;
 ref2_angle_tol = 1e-1;
 ref2_angle = deg2rad(-135); 
-max_lin_vel_rob2 = 0.1414;
+max_lin_vel_rob2 = 0.13;
 
 
 %% ROS2 Network

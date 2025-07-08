@@ -2,7 +2,7 @@ clc
 clear
 
 %% DATA EXTRACTION
-bagPath = "./tests/test_1"; 
+bagPath = "./tests/test_4"; 
 bag = ros2bag(bagPath);
 
 % We extract the relevant topics
