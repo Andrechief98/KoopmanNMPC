@@ -67,26 +67,29 @@ odomData.tb3_3.y(start_idx_tb3_3_time) = [];
 odomData.tb3_3.theta(start_idx_tb3_3_time) = [];
 odomData.tb3_3.time = odomData.tb3_3.time - odomData.tb3_3.time(1);
 
-end_idx_tb3_3_time = find(odomData.tb3_3.x >=2);
-odomData.tb3_3.time(end_idx_tb3_3_time) = [];
-odomData.tb3_3.x(end_idx_tb3_3_time) = [];
-odomData.tb3_3.y(end_idx_tb3_3_time) = [];
-odomData.tb3_3.theta(end_idx_tb3_3_time) = [];
+% end_idx_tb3_3_time = find(odomData.tb3_3.x >=2);
+% odomData.tb3_3.time(end_idx_tb3_3_time) = [];
+% odomData.tb3_3.x(end_idx_tb3_3_time) = [];
+% odomData.tb3_3.y(end_idx_tb3_3_time) = [];
+% odomData.tb3_3.theta(end_idx_tb3_3_time) = [];
+% 
+% % Refining the final data:
+% odomData.tb3_3.time = [odomData.tb3_3.time; 20];
+% odomData.tb3_3.x = [odomData.tb3_3.x; odomData.tb3_3.x(end)];
+% odomData.tb3_3.y = [odomData.tb3_3.y; odomData.tb3_3.y(end)];
+% odomData.tb3_3.theta = [odomData.tb3_3.theta ; odomData.tb3_3.theta(end)];
+% 
+% cmdData.tb3_3.time = [cmdData.tb3_3.time; 20];
+% cmdData.tb3_3.vx = [cmdData.tb3_3.vx ; cmdData.tb3_3.vx(end)];
+% cmdData.tb3_3.omega_z = [cmdData.tb3_3.omega_z ; cmdData.tb3_3.omega_z(end)];
 
-% Refining the final data:
-odomData.tb3_3.time = [odomData.tb3_3.time; 20];
-odomData.tb3_3.x = [odomData.tb3_3.x; odomData.tb3_3.x(end)];
-odomData.tb3_3.y = [odomData.tb3_3.y; odomData.tb3_3.y(end)];
-odomData.tb3_3.theta = [odomData.tb3_3.theta ; odomData.tb3_3.theta(end)];
-
-cmdData.tb3_3.time = [cmdData.tb3_3.time; 20];
-cmdData.tb3_3.vx = [cmdData.tb3_3.vx ; cmdData.tb3_3.vx(end)];
-cmdData.tb3_3.omega_z = [cmdData.tb3_3.omega_z ; cmdData.tb3_3.omega_z(end)];
-
+save("extracted_rosbags_data.mat")
 %% PLOTS
 % TRAJECTORIES PLOTS
 clc
+clear
 close all
+load("extracted_rosbags_data.mat")
 
 % Radius of the two robots
 r_rob1 = 0.25;
