@@ -191,7 +191,7 @@ title('Heading $\theta$ [deg]','interpreter','latex')
 
 nexttile(4), hold on
 
-plot(cmdData.tb3_3.time, cmdData.tb3_3.vx, 'b-')
+plot(cmdData.tb3_3.time, cmdData.tb3_3.vx, 'r.-')
 
 hold off
 grid on, grid minor, box on

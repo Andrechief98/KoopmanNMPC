@@ -123,16 +123,23 @@ plot_obst([obst.x_c(1); obst.y_c(1)], [obst.lx(1); obst.ly(1)], '--', 1.25, [0.3
 % Bin
 plot_obst([obst.x_c(2); obst.y_c(2)], [obst.lx(2); obst.ly(2)], '--', 1.25, [0.35 0.35 0.35])
 
-% Robot 1 (tb3_3)
-plot(odomData.tb3_3.x(1::), odomData.tb3_3.y(:), '-', 'linewidth', 1.5, 'color', [0.5 0.5 1])
-plot(odomData.tb3_3.x(:), odomData.tb3_3.y(:), 'b.', 'markersize', 15)
-% plot_obst([odomData.tb3_3.x(:), odomData.tb3_3.y(:)], [2*r_rob1; 2*r_rob1], 1.5, [0.5 0.5 1])
-
-
+step = 5;
 % Robot 2 (tb3_4)
-plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:),  '-', 'linewidth', 1.25, 'color', [0.35 0.35 0.35])
-plot(odomData.tb3_4.x(:), odomData.tb3_4.y(:), '.', 'markersize', 15, 'color', [0.35 0.35 0.35])
-% plot_obst([odomData.tb3_4.x(:), odomData.tb3_4.y(:)], [2*r_rob2; 2*r_rob2], 1.5, [0.35 0.35 0.35])
+plot(odomData.tb3_4.x(1:step:end), odomData.tb3_4.y(1:step:end),  '-', 'linewidth', 1.25, 'color', [0.35 0.35 0.35])
+plot(odomData.tb3_4.x(1:step:end), odomData.tb3_4.y(1:step:end), '.', 'markersize', 15, 'color', [0.35 0.35 0.35])
+
+for i=1:step:length(odomData.tb3_4.x)
+    plot_obst([odomData.tb3_4.x(i), odomData.tb3_4.y(i)], [r_rob2; r_rob2], '-', 1.5, [0.75 0.75 0.75])
+end
+
+% Robot 1 (tb3_3)
+plot(odomData.tb3_3.x(1:step:end), odomData.tb3_3.y(1:step:end), '-', 'linewidth', 1.5, 'color', [0.5 0.5 1])
+plot(odomData.tb3_3.x(1:step:end), odomData.tb3_3.y(1:step:end), 'b.', 'markersize', 15)
+
+for i=1:step:length(odomData.tb3_3.x)
+    plot_obst([odomData.tb3_3.x(i), odomData.tb3_3.y(i)], [r_rob1; r_rob1], '-', 1.5, [0.5 0.5 1])
+end
+
 
 
 % Reference
@@ -184,7 +191,7 @@ title('Heading $\theta$ [deg]','interpreter','latex')
 
 nexttile(4), hold on
 
-plot(cmdData.tb3_3.time, cmdData.tb3_3.vx, 'b-')
+plot(cmdData.tb3_3.time, cmdData.tb3_3.vx, r.b-')
 
 hold off
 grid on, grid minor, box on
